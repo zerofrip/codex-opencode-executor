@@ -607,25 +607,20 @@ func (c *Client) Context(ctx context.Context, _ Location, sessionID string) (jso
 	}
 }
 
-func (c *Client) Permissions(ctx context.Context, loc Location, _ string) (json.RawMessage, error) {
-	var params api.V2PermissionRequestListParams
-	var listLoc api.V2PermissionRequestListLocation
-	if dir := c.dir(loc); dir != "" {
-		listLoc.Directory = api.NewOptString(dir)
-	}
-	if loc.Workspace != "" {
-		listLoc.Workspace = api.NewOptString(loc.Workspace)
-	}
-	if listLoc.Directory.Set || listLoc.Workspace.Set {
-		params.Location = api.NewOptV2PermissionRequestListLocation(listLoc)
+func (c *Client) Permissions(ctx context.Context, _ Location, sessionID string) (json.RawMessage, error) {
+	if sessionID == "" {
+		return nil, fmt.Errorf("session_id is required")
 	}
 
-	res, err := c.apiClient.V2PermissionRequestList(ctx, params)
+	var params api.V2SessionPermissionListParams
+	params.SessionID = sessionID
+
+	res, err := c.apiClient.V2SessionPermissionList(ctx, params)
 	if err != nil {
 		return nil, err
 	}
 	switch r := res.(type) {
-	case *api.V2PermissionRequestListOK:
+	case *api.V2SessionPermissionListOK:
 		raw, err := json.Marshal(r.Data)
 		if err != nil {
 			return nil, err
@@ -635,8 +630,10 @@ func (c *Client) Permissions(ctx context.Context, loc Location, _ string) (json.
 		return nil, fmt.Errorf("invalid request: %s", r.Message)
 	case *api.UnauthorizedError:
 		return nil, fmt.Errorf("unauthorized: %s", r.Message)
+	case *api.V2SessionPermissionListNotFoundApplicationJSON:
+		return nil, fmt.Errorf("session not found: %s", string(*r))
 	default:
-		return nil, fmt.Errorf("unexpected permission requests response: %T", res)
+		return nil, fmt.Errorf("unexpected session permission list response: %T", res)
 	}
 }
 
@@ -676,7 +673,11 @@ func (c *Client) PermissionReply(ctx context.Context, _ Location, sessionID, req
 	}
 }
 
-func (c *Client) Questions(ctx context.Context, loc Location, _ string) (json.RawMessage, error) {
+func (c *Client) Questions(ctx context.Context, loc Location, sessionID string) (json.RawMessage, error) {
+	if sessionID == "" {
+		return nil, fmt.Errorf("session_id is required")
+	}
+
 	var params api.V2QuestionRequestListParams
 	var listLoc api.V2QuestionRequestListLocation
 	if dir := c.dir(loc); dir != "" {

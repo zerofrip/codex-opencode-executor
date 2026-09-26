@@ -3,7 +3,6 @@ package opencode
 import (
 	"context"
 	"encoding/json"
-	"sync"
 	"testing"
 	"time"
 
@@ -32,16 +31,17 @@ func pendingPermissionHandlerMock(t *testing.T, promptStarted chan struct{}, pen
 		V2SessionContextFunc: func(context.Context, opencodeapi.V2SessionContextParams) (opencodeapi.V2SessionContextRes, error) {
 			return &opencodeapi.V2SessionContextOK{Data: []opencodeapi.SessionMessage{}}, nil
 		},
-		V2PermissionRequestListFunc: func(context.Context, opencodeapi.V2PermissionRequestListParams) (opencodeapi.V2PermissionRequestListRes, error) {
+		V2SessionPermissionListFunc: func(_ context.Context, params opencodeapi.V2SessionPermissionListParams) (opencodeapi.V2SessionPermissionListRes, error) {
+			require.Equal(t, sessionID, params.SessionID)
 			select {
 			case <-pending:
-				return &opencodeapi.V2PermissionRequestListOK{Data: []opencodeapi.PermissionV2Request{{
+				return &opencodeapi.V2SessionPermissionListOK{Data: []opencodeapi.PermissionV2Request{{
 					ID:        "perm-1",
 					Action:    "write file",
 					SessionID: sessionID,
 				}}}, nil
 			default:
-				return &opencodeapi.V2PermissionRequestListOK{Data: []opencodeapi.PermissionV2Request{}}, nil
+				return &opencodeapi.V2SessionPermissionListOK{Data: []opencodeapi.PermissionV2Request{}}, nil
 			}
 		},
 		V2QuestionRequestListFunc: func(context.Context, opencodeapi.V2QuestionRequestListParams) (opencodeapi.V2QuestionRequestListRes, error) {
@@ -71,8 +71,9 @@ func pendingQuestionHandlerMock(t *testing.T, promptStarted chan struct{}, pendi
 		V2SessionContextFunc: func(context.Context, opencodeapi.V2SessionContextParams) (opencodeapi.V2SessionContextRes, error) {
 			return &opencodeapi.V2SessionContextOK{Data: []opencodeapi.SessionMessage{}}, nil
 		},
-		V2PermissionRequestListFunc: func(context.Context, opencodeapi.V2PermissionRequestListParams) (opencodeapi.V2PermissionRequestListRes, error) {
-			return &opencodeapi.V2PermissionRequestListOK{Data: []opencodeapi.PermissionV2Request{}}, nil
+		V2SessionPermissionListFunc: func(_ context.Context, params opencodeapi.V2SessionPermissionListParams) (opencodeapi.V2SessionPermissionListRes, error) {
+			require.Equal(t, sessionID, params.SessionID)
+			return &opencodeapi.V2SessionPermissionListOK{Data: []opencodeapi.PermissionV2Request{}}, nil
 		},
 		V2QuestionRequestListFunc: func(context.Context, opencodeapi.V2QuestionRequestListParams) (opencodeapi.V2QuestionRequestListRes, error) {
 			select {
@@ -269,21 +270,16 @@ func TestExecuteWaitSecondsReturnsOnPendingPermission(t *testing.T) {
 		return nil, ctx.Err()
 	}, realisticRunningMessages)
 
-	var mu sync.Mutex
-	basePermission := handler.V2PermissionRequestListFunc
-	handler.V2PermissionRequestListFunc = func(ctx context.Context, p opencodeapi.V2PermissionRequestListParams) (opencodeapi.V2PermissionRequestListRes, error) {
-		mu.Lock()
-		base := basePermission
-		mu.Unlock()
+	handler.V2SessionPermissionListFunc = func(ctx context.Context, p opencodeapi.V2SessionPermissionListParams) (opencodeapi.V2SessionPermissionListRes, error) {
 		select {
 		case <-pendingAppeared:
-			return &opencodeapi.V2PermissionRequestListOK{Data: []opencodeapi.PermissionV2Request{{
+			return &opencodeapi.V2SessionPermissionListOK{Data: []opencodeapi.PermissionV2Request{{
 				ID:        "perm-exec",
 				Action:    "edit",
 				SessionID: "ses-exec-pending",
 			}}}, nil
 		default:
-			return base(ctx, p)
+			return &opencodeapi.V2SessionPermissionListOK{Data: []opencodeapi.PermissionV2Request{}}, nil
 		}
 	}
 

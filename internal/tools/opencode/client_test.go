@@ -563,8 +563,9 @@ func TestClient_Permissions(t *testing.T) {
 	t.Parallel()
 
 	handler := &HandlerMock{
-		V2PermissionRequestListFunc: func(ctx context.Context, params opencodeapi.V2PermissionRequestListParams) (opencodeapi.V2PermissionRequestListRes, error) {
-			return &opencodeapi.V2PermissionRequestListOK{
+		V2SessionPermissionListFunc: func(ctx context.Context, params opencodeapi.V2SessionPermissionListParams) (opencodeapi.V2SessionPermissionListRes, error) {
+			require.Equal(t, "ses-1", params.SessionID)
+			return &opencodeapi.V2SessionPermissionListOK{
 				Data: []opencodeapi.PermissionV2Request{
 					{
 						ID:        "per-1",
@@ -580,6 +581,14 @@ func TestClient_Permissions(t *testing.T) {
 	res, err := client.Permissions(t.Context(), Location{}, "ses-1")
 	require.NoError(t, err)
 	require.Contains(t, string(res), `"per-1"`)
+}
+
+func TestClient_PermissionsValidation(t *testing.T) {
+	t.Parallel()
+
+	client := newTestClient(t, Config{BaseURL: "http://127.0.0.1:1"})
+	_, err := client.Permissions(t.Context(), Location{}, "")
+	require.EqualError(t, err, "session_id is required")
 }
 
 func TestClient_PermissionReply(t *testing.T) {
@@ -615,6 +624,14 @@ func TestClient_Questions(t *testing.T) {
 	res, err := client.Questions(t.Context(), Location{}, "ses-1")
 	require.NoError(t, err)
 	require.Contains(t, string(res), `"que-1"`)
+}
+
+func TestClient_QuestionsValidation(t *testing.T) {
+	t.Parallel()
+
+	client := newTestClient(t, Config{BaseURL: "http://127.0.0.1:1"})
+	_, err := client.Questions(t.Context(), Location{}, "")
+	require.EqualError(t, err, "session_id is required")
 }
 
 func TestClient_QuestionReply(t *testing.T) {
